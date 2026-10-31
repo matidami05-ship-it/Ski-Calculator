@@ -1,0 +1,42 @@
+name: SkiCalculator
+options:
+  bundleIdPrefix: com.skicalculator
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  SkiCalculator:
+    type: application
+    platform: iOS
+    sources:
+      - path: app/Sources
+      - path: app/Assets.xcassets
+      - path: app/www
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.skicalculator.app
+        PRODUCT_NAME: SkiCalculator
+        MARKETING_VERSION: "3.3"
+        CURRENT_PROJECT_VERSION: "21"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        SWIFT_VERSION: "5.0"
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+    info:
+      path: app/Info.plist
+      properties:
+        CFBundleDisplayName: Ski Calculator
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen:
+          UIColorName: LaunchBG
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIRequiresFullScreen: true
+        ITSAppUsesNonExemptEncryption: false
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: false
