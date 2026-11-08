@@ -15,7 +15,7 @@ targets:
         buildPhase: resources
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.skicalculator.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.matidami05.skicalculator
         PRODUCT_NAME: SkiCalculator
         MARKETING_VERSION: "3.3"
         CURRENT_PROJECT_VERSION: "21"
