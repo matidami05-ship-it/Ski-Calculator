@@ -318,6 +318,8 @@ svg.pipe{width:100%;height:auto;display:block}
           <option value="elecost">Electricity cost</option>
         </optgroup>
         <optgroup label="Plumbing">
+          <option value="pipethread">Pipe threads: NPT, BSP, metric, JIC…</option>
+          <option value="pipeid">Identify a pipe thread</option>
           <option value="poffset">Pipe offset (travel)</option>
           <option value="slope">Pipe slope &amp; fall</option>
           <option value="pvol">Pipe volume</option>
@@ -2583,6 +2585,80 @@ Object.assign(CONV,{
   }
 });
 
+/* ---------- pipe threads ---------- */
+// rows: [size, major diameter (mm), threads per inch, tap drill text]
+const PT_NPT=[['1/16',7.938,27,'C (0.242")'],['1/8',10.287,27,'Q (0.332")'],['1/4',13.716,18,'7/16"'],['3/8',17.145,18,'37/64"'],['1/2',21.336,14,'23/32"'],['3/4',26.670,14,'59/64"'],['1',33.401,11.5,'1-5/32"'],['1-1/4',42.164,11.5,'1-1/2"'],['1-1/2',48.260,11.5,'1-47/64"'],['2',60.325,11.5,'2-7/32"'],['2-1/2',73.025,8,'2-5/8"'],['3',88.900,8,'3-1/4"'],['4',114.300,8,'4-1/4"']];
+const PT_BSP=[['1/16',7.723,28,'6.6 mm','6.8 mm'],['1/8',9.728,28,'8.4 mm','8.8 mm'],['1/4',13.157,19,'11.2 mm','11.8 mm'],['3/8',16.662,19,'14.75 mm','15.25 mm'],['1/2',20.955,14,'18.25 mm','19.0 mm'],['3/4',26.441,14,'23.75 mm','24.5 mm'],['1',33.249,11,'30.0 mm','30.75 mm'],['1-1/4',41.910,11,'38.5 mm','39.5 mm'],['1-1/2',47.803,11,'44.5 mm','45.25 mm'],['2',59.614,11,'56.0 mm','57.0 mm'],['2-1/2',75.184,11,'—','72.5 mm'],['3',87.884,11,'—','85.0 mm'],['4',113.030,11,'—','110.0 mm']];
+const PT_MET=[[10,1],[12,1.5],[14,1.5],[16,1.5],[18,1.5],[20,1.5],[22,1.5],[24,1.5],[26,1.5],[27,2],[30,2],[33,2],[36,2],[42,2],[45,2],[48,2],[52,2]];
+const PT_JIC=[['-2','5/16-24',24],['-3','3/8-24',24],['-4','7/16-20',20],['-5','1/2-20',20],['-6','9/16-18',18],['-8','3/4-16',16],['-10','7/8-14',14],['-12','1-1/16-12',12],['-14','1-3/16-12',12],['-16','1-5/16-12',12],['-20','1-5/8-12',12],['-24','1-7/8-12',12],['-32','2-1/2-12',12]];
+const PT_SAE45=[['1/8 tube','5/16-24',24],['3/16 tube','3/8-24',24],['1/4 tube','7/16-20',20],['5/16 tube','1/2-20',20],['3/8 tube','5/8-18',18],['1/2 tube','3/4-16',16],['5/8 tube','7/8-14',14],['3/4 tube','1-1/16-14',14]];
+const PT_ORFS=[['-4','9/16-18',18],['-6','11/16-16',16],['-8','13/16-16',16],['-10','1-14',14],['-12','1-3/16-12',12],['-16','1-7/16-12',12],['-20','1-11/16-12',12],['-24','2-12',12]];
+const unMajor=s=>parseLen(s.split('-').slice(0,-1).join('-').replace(/^(\d+)-(\d+\/\d+)$/,'$1 $2'))*25.4;
+const unDrill=(majIn,tpi)=>{const d=majIn-1.0825/tpi;return `${frac(d,64)} <small>(${num(d,3)}")</small>`};
+const PIPE_STD={
+  npt:{name:'NPT',long:'NPT — US tapered pipe',angle:60,taper:true,seal:'Thread sealant or PTFE tape (seals on the threads)',rows:PT_NPT.map(r=>({size:r[0]+'"',od:r[1],tpi:r[2],drill:r[3]+' (without reamer)'})),fam:'us'},
+  nptf:{name:'NPTF',long:'NPTF — Dryseal tapered pipe',angle:60,taper:true,seal:'Metal-to-metal seal, no sealant needed when both parts are NPTF',rows:PT_NPT.map(r=>({size:r[0]+'"',od:r[1],tpi:r[2],drill:r[3]+' (ream for best seal)'})),fam:'us'},
+  nps:{name:'NPS / NPSM',long:'NPS / NPSM — US straight pipe',angle:60,taper:false,seal:'Gasket, O-ring or swivel seat (straight threads don’t seal by themselves)',rows:PT_NPT.map(r=>({size:r[0]+'"',od:r[1],tpi:r[2],drill:'slightly larger than NPT'})),fam:'us'},
+  bspt:{name:'BSPT (R / Rc)',long:'BSPT — British tapered (R, Rc, Rp) · Japan PT',angle:55,taper:true,seal:'Thread sealant or PTFE tape (seals on the threads)',rows:PT_BSP.map(r=>({size:r[0]+'"',od:r[1],tpi:r[2],drill:r[3]})),fam:'bsp'},
+  bspp:{name:'BSPP (G)',long:'BSPP — British parallel (G) · Japan PF',angle:55,taper:false,seal:'Bonded washer, O-ring or gasket face seal',rows:PT_BSP.map(r=>({size:r[0]+'"',od:r[1],tpi:r[2],drill:r[4]})),fam:'bsp'},
+  metric:{name:'Metric',long:'Metric fine (ISO 6149 / DIN fittings)',angle:60,taper:false,seal:'O-ring, bonded washer or cutting ring (DIN 2353)',rows:PT_MET.map(([d,p])=>({size:`M${d}×${p}`,od:d,tpi:25.4/p,pitch:p,drill:`${num(d-p,2)} mm`})),fam:'met'},
+  jic:{name:'JIC 37° / SAE ORB',long:'JIC 37° flare & SAE O-ring boss (UN/UNF)',angle:60,taper:false,seal:'JIC: 37° flare cone · ORB: O-ring at the boss',rows:PT_JIC.map(([d,t,tpi])=>({size:`${d} (${t})`,od:unMajor(t),tpi,drill:unDrill(unMajor(t)/25.4,tpi),tube:`${num(Math.abs(parseInt(d))/16,4)}" tube OD`})),fam:'un'},
+  sae45:{name:'SAE 45° flare',long:'SAE 45° flare (UNF)',angle:60,taper:false,seal:'45° flare cone',rows:PT_SAE45.map(([d,t,tpi])=>({size:`${d} (${t})`,od:unMajor(t),tpi,drill:unDrill(unMajor(t)/25.4,tpi)})),fam:'un'},
+  orfs:{name:'ORFS',long:'ORFS — O-ring face seal (SAE J1453)',angle:60,taper:false,seal:'O-ring in the flat face',rows:PT_ORFS.map(([d,t,tpi])=>({size:`${d} (${t})`,od:unMajor(t),tpi,drill:unDrill(unMajor(t)/25.4,tpi)})),fam:'un'},
+  ght:{name:'GHT',long:'GHT — Garden hose thread',angle:60,taper:false,seal:'Rubber hose washer',rows:[{size:'3/4" GHT',od:26.99,tpi:11.5,drill:'—'}],fam:'ght'}
+};
+function threadFit(a,sa,b,sb){
+  const sameTpi=Math.abs(a.tpi-b.tpi)<0.15,sameOd=Math.abs(a.od-b.od)/a.od<0.012,sameAng=sa.angle===sb.angle;
+  if(sameTpi&&sameOd&&sameAng){
+    if(sa.fam===sb.fam){
+      if(sa.taper!==sb.taper)return ['ok','Same size. Taper male into straight female works with sealant; don’t mix for high pressure.'];
+      return ['ok','Same thread. Fits.'];}
+    return ['ok','Same thread size. Fits; check the seal type.'];}
+  if(sameTpi&&Math.abs(a.od-b.od)/a.od<0.035)return ['warn',sameAng?'Close but not the same. May start, won’t seal.':`Different thread angle (${sa.angle}° vs ${sb.angle}°). May start, will leak. Use an adapter.`];
+  return ['no',sameTpi?'Different diameter. Won’t fit.':'Different thread count. Won’t fit.'];
+}
+const tpiPitch=r=>`${num(r.tpi,2)} TPI<small>${num(25.4/r.tpi,3)} mm pitch</small>`;
+const odOut=mm=>`${num(mm/25.4,3)}"<small>${num(mm,2)} mm</small>`;
+const fitBadge=k=>k==='ok'?'✓':k==='warn'?'⚠':'✗';
+TEXT_FIELDS.add('pi_od');TEXT_FIELDS.add('pi_t');
+Object.assign(CONV,{
+  pipethread:{
+    fields:()=>sel('pt_s','Thread standard',Object.entries(PIPE_STD).map(([k,v])=>[k,v.long]),'npt',true)+`<div class="field full" id="pt_szw"></div>`
+      +hint('Pipe sizes are nominal names, not the measured diameter. A 1/2" pipe thread is about 0.84" across.'),
+    calc(){const k=g('pt_s').value,S=PIPE_STD[k];
+      if(!g('pt_sz')||g('pt_sz').dataset.s!==k){const old=g('pt_sz'),prevOd=old?PIPE_STD[old.dataset.s].rows[+old.value]?.od:21.336;
+        let pick=0;S.rows.forEach((r,i)=>{if(Math.abs(r.od-prevOd)<Math.abs(S.rows[pick].od-prevOd))pick=i});
+        g('pt_szw').innerHTML=`<label for="pt_sz">Size</label><select id="pt_sz" data-s="${k}">${S.rows.map((r,i)=>`<option value="${i}" ${i===pick?'selected':''}>${esc(r.size)}</option>`).join('')}</select>`;g('pt_sz').addEventListener('input',runConv)}
+      const r=S.rows[+g('pt_sz').value];if(!r)return null;
+      const out=[['Thread',`${esc(r.size)}<small>${esc(S.name)}</small>`,true],['Outside diameter (male)',odOut(r.od),true],['Threads per inch',tpiPitch(r),true],
+        ['Thread angle',S.angle+'°'],['Type',S.taper?'Tapered (1 in 16 on diameter, ¾" per foot)':'Straight / parallel'],['How it seals',S.seal],['Tap drill',r.drill]];
+      if(r.tube)out.push(['Tube size',r.tube]);
+      for(const [k2,S2] of Object.entries(PIPE_STD)){if(k2===k)continue;
+        let best=null;for(const r2 of S2.rows){const d=Math.abs(r2.od-r.od)+Math.abs(r2.tpi-r.tpi)*0.4;if(!best||d<best.d)best={r2,d}}
+        if(!best||Math.abs(best.r2.od-r.od)/r.od>0.12)continue;
+        const [kind,note]=threadFit(r,S,best.r2,S2);
+        out.push([`${fitBadge(kind)} ${S2.name}`,`${esc(best.r2.size)}<small>${note} ${num(best.r2.od/25.4,3)}" · ${num(best.r2.tpi,1)} TPI</small>`,kind==='ok'])}
+      return out;}
+  },
+  pipeid:{
+    fields:()=>inp('pi_od','Measured outside diameter of the male thread','0.84')+sel('pi_u','Unit',[['in','inches'],['mm','mm']],'in')
+      +inp('pi_t','Threads per inch (or pitch in mm)','14')+sel('pi_tu','That number is',[['tpi','Threads per inch'],['mm','Pitch in mm']],'tpi')
+      +sel('pi_tp','Does it get narrower toward the end?',[['','Not sure'],['t','Yes, tapered'],['p','No, straight']],'')
+      +hint('Measure across the thread peaks with calipers. Count threads over 1 inch, or measure peak-to-peak for the pitch. For a female thread, measure the inside and add roughly one thread depth.'),
+    calc(){let od=parseLen(g('pi_od').value),t=parseFloat(g('pi_t').value);if(!isFinite(od)||!isFinite(t)||od<=0||t<=0)return null;
+      if(g('pi_u').value==='in')od*=25.4;const tpi=g('pi_tu').value==='tpi'?t:25.4/t,tp=g('pi_tp').value;
+      const cands=[];for(const [k,S] of Object.entries(PIPE_STD)){if(tp==='t'&&!S.taper||tp==='p'&&S.taper)continue;
+        for(const r of S.rows){const e=Math.abs(r.od-od)/r.od,te=Math.abs(r.tpi-tpi)/r.tpi;cands.push({S,r,score:e*6+te*1.5})}}
+      cands.sort((a,b)=>a.score-b.score);const seen=new Set();const top=[];
+      for(const c of cands){const key=c.r.od.toFixed(2)+'|'+c.r.tpi.toFixed(1)+'|'+c.S.angle+'|'+c.S.taper;if(seen.has(key))continue;seen.add(key);top.push(c);if(top.length>=5)break}
+      const label=s=>s<0.06?'Very likely':s<0.15?'Possible':'Unlikely';
+      return [['You measured',`${num(od/25.4,3)}" · ${num(tpi,2)} TPI<small>${num(od,2)} mm · ${num(25.4/tpi,3)} mm pitch</small>`],
+        ...top.map((c,i)=>{const same=cands.filter(x=>x!==c&&Math.abs(x.r.od-c.r.od)<0.05&&Math.abs(x.r.tpi-c.r.tpi)<0.05&&x.S.angle===c.S.angle&&x.S.taper===c.S.taper).map(x=>x.S.name);
+          return [`${label(c.score)}: ${c.S.name}${same.length?' / '+same.join(' / '):''}`,`${esc(c.r.size)}<small>${num(c.r.od/25.4,3)}" · ${num(c.r.tpi,1)} TPI · ${c.S.angle}° · ${c.S.taper?'tapered':'straight'}</small>`,i===0]}),
+        ['Tell NPT from BSP','Same size and TPI? Look at the thread tips: NPT (60°) has flat-ish sharp V tips, BSP (55°) is rounder. At 1/2" and 3/4" both are 14 TPI.']];}
+  }
+});
+
 let convMode=store.get('bb-conv')||'length';
 function setConv(m){
   convMode=m;store.set('bb-conv',m);
@@ -2614,7 +2690,7 @@ function runConv(){
     r.map(([k,v,big])=>`<div class="row${big?' big':''}"><span class="k">${k}</span><span class="v">${v}</span></div>`).join('');
 }
 $('#convMode').addEventListener('change',e=>setConv(e.target.value));
-const SEARCH_KW={"conduitfill": "conduit fill emt pvc rigid thhn wires pipe size nec jam","wiregauge": "awg swg wire size gauge mm diameter","pfactor": "power factor kvar capacitor pf","energy": "kwh kw watts joules hours consumption bill","battery": "mah wh battery runtime","vdivider": "resistor divider","voltjoule": "ev electronvolt joules volts","dbm": "decibel milliwatt dbw rf","power": "amps watts va kva volts kw horsepower","potential": "volts voltage millivolts kilovolts","tz": "time zone world clock country city abroad poland germany uk london mexico india japan china philippines australia canada europe asia", "fx": "money exchange rate dollar euro peso pound yen", "length": "distance feet meters inches miles km yards", "weight": "mass pounds kilograms ounces grams tons", "volume": "gallons liters quarts cups", "temp": "fahrenheit celsius kelvin degrees", "until": "countdown days left timer", "mortgage": "loan house home payment", "amort": "loan mortgage schedule", "autoloan": "car vehicle truck payment", "lease": "car vehicle", "ccpayoff": "debt loan credit card", "ratesolve": "loan apr", "loan": "personal boat student business payment", "compound": "savings investment cd interest", "retire": "401k ira savings pension", "salary": "wage pay hourly income paycheck", "pace": "run running jog mile", "bmi": "body mass weight", "calories": "tdee bmr diet", "timecard": "hours payroll work week overtime", "timeday": "hours payroll work shift overtime", "tapdrill": "bolt nut wrench socket thread screw", "offset": "conduit emt bend", "percent": "percentage", "scical": "trig sin cos log root square", "shapes": "circle cylinder sphere tank area volume triangle", "pipeflow": "gpm water", "paint": "wall gallons", "weather": "heat index wind chill dew point humidity", "random": "dice coin", "password": "secure random", "dfp": "decimal fraction percent", "gasmark": "oven baking", "cooking": "recipe kitchen baking", "tiresize": "wheel truck", "ftinadd": "length adding sum total tape measure", "tile": "metric floor wall ceramic porcelain", "enginehp": "car drag race", "subnet": "ip network cidr", "resistor": "color bands electronics", "bac": "alcohol drinks", "pregnancy": "due date ovulation conception period", "elecost": "kwh electric bill power"};
+const SEARCH_KW={"pipethread": "npt nptf nps npsm bsp bspt bspp g r rc pt pf metric jic orb sae flare orfs hose ght fitting thread hydraulic tap drill", "pipeid": "identify measure fitting thread npt bsp tpi pitch","conduitfill": "conduit fill emt pvc rigid thhn wires pipe size nec jam","wiregauge": "awg swg wire size gauge mm diameter","pfactor": "power factor kvar capacitor pf","energy": "kwh kw watts joules hours consumption bill","battery": "mah wh battery runtime","vdivider": "resistor divider","voltjoule": "ev electronvolt joules volts","dbm": "decibel milliwatt dbw rf","power": "amps watts va kva volts kw horsepower","potential": "volts voltage millivolts kilovolts","tz": "time zone world clock country city abroad poland germany uk london mexico india japan china philippines australia canada europe asia", "fx": "money exchange rate dollar euro peso pound yen", "length": "distance feet meters inches miles km yards", "weight": "mass pounds kilograms ounces grams tons", "volume": "gallons liters quarts cups", "temp": "fahrenheit celsius kelvin degrees", "until": "countdown days left timer", "mortgage": "loan house home payment", "amort": "loan mortgage schedule", "autoloan": "car vehicle truck payment", "lease": "car vehicle", "ccpayoff": "debt loan credit card", "ratesolve": "loan apr", "loan": "personal boat student business payment", "compound": "savings investment cd interest", "retire": "401k ira savings pension", "salary": "wage pay hourly income paycheck", "pace": "run running jog mile", "bmi": "body mass weight", "calories": "tdee bmr diet", "timecard": "hours payroll work week overtime", "timeday": "hours payroll work shift overtime", "tapdrill": "bolt nut wrench socket thread screw", "offset": "conduit emt bend", "percent": "percentage", "scical": "trig sin cos log root square", "shapes": "circle cylinder sphere tank area volume triangle", "pipeflow": "gpm water", "paint": "wall gallons", "weather": "heat index wind chill dew point humidity", "random": "dice coin", "password": "secure random", "dfp": "decimal fraction percent", "gasmark": "oven baking", "cooking": "recipe kitchen baking", "tiresize": "wheel truck", "ftinadd": "length adding sum total tape measure", "tile": "metric floor wall ceramic porcelain", "enginehp": "car drag race", "subnet": "ip network cidr", "resistor": "color bands electronics", "bac": "alcohol drinks", "pregnancy": "due date ovulation conception period", "elecost": "kwh electric bill power"};
 const ALL_TOOLS=(()=>{const t=document.createElement('template');t.innerHTML=$('#convMode').innerHTML;return [...t.content.querySelectorAll('optgroup')].map(gp=>({label:gp.label,opts:[...gp.querySelectorAll('option')].map(o=>[o.value,o.textContent])}))})();
 $('#convSearch').addEventListener('input',e=>{
   const q=e.target.value.trim().toLowerCase().split(/\s+/).filter(Boolean),sel_=$('#convMode');let n=0,first=null;
